@@ -11,9 +11,19 @@ const createRequest = async (options = {}) => {
   }
 
   const response = await fetch(url, config);
+
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    let errorText = `HTTP ошибка: ${response.status}`;
+    try {
+
+      const errorData = await response.json();
+      errorText = errorData.error || errorData.message || errorText;
+    } catch (e) {
+      // Если бэкенд прислал не JSON, а обычный текст или упал совсем — оставляем статус
+    }
+    throw new Error(errorText);
   }
+
   if (response.status === 204) {
     return true;
   }

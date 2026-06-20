@@ -4,9 +4,36 @@ import bodyParser from "body-parser";
 import * as crypto from "crypto";
 import pino from 'pino';
 import pinoPretty from 'pino-pretty';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DB_FILE = path.join(__dirname, 'db.json');
 
 const app = express();
 const logger = pino(pinoPretty());
+
+// Читаем БД из файла
+function loadTickets() {
+    try {
+        return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    } catch (error) {
+        logger.error('Не удалось прочитать db.json, инициализируем пустым массивом');
+        return [];
+    }
+}
+
+// Пишем БД в файл
+function saveTickets(data) {
+    try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+    } catch (error) {
+        logger.error(`Ошибка записи в db.json: ${error.message}`);
+    }
+}
 
 app.use(cors());
 app.use(
@@ -21,37 +48,19 @@ app.use((req, res, next) => {
     next();
 });
 
-let tickets = [
-    {
-        id: crypto.randomUUID(),
-        name: "Поменять краску в принтере, ком. 404",
-        description: "Принтер HP LJ-1210, картриджи на складе",
-        status: false,
-        created: Date.now(),
-    },
-    {
-        id: crypto.randomUUID(),
-        name: "Переустановить Windows, PC-Hall24",
-        description: "",
-        status: false,
-        created: Date.now(),
-    },
-    {
-        id: crypto.randomUUID(),
-        name: "Установить обновление KB-31642dv3875",
-        description: "Вышло критическое обновление для Windows",
-        status: false,
-        created: Date.now(),
-    },
-];
+// Загружаем данные при старте
+let tickets = loadTickets();
 
 app.use(async (request, response) => {
     const { method, id } = request.query;
     switch (method) {
-        case "allTickets":
+        case "allTickets": {
             logger.info('All tickets has been called');
-            response.send(JSON.stringify(tickets)).end();
+            // Исключаем поле description по спецификации
+            const lightTickets = tickets.map(({ description, ...rest }) => rest);
+            response.send(JSON.stringify(lightTickets)).end();
             break;
+        }
         case "ticketById": {
             const ticket = tickets.find((ticket) => ticket.id === id);
             if (!ticket) {
@@ -75,6 +84,8 @@ app.use(async (request, response) => {
                     created: Date.now(),
                 };
                 tickets.push(newTicket);
+                saveTickets(tickets);
+
                 logger.info(`New ticket created: ${JSON.stringify(newTicket)}`);
                 response.send(JSON.stringify(newTicket)).end();
             } catch (error) {
@@ -87,6 +98,8 @@ app.use(async (request, response) => {
             const ticket = tickets.find((ticket) => ticket.id === id);
             if (ticket) {
                 tickets = tickets.filter((ticket) => ticket.id !== id);
+                saveTickets(tickets);
+
                 logger.info(`Ticket deleted: ${JSON.stringify(ticket)}`);
                 response.status(204).end();
             } else {
@@ -103,6 +116,8 @@ app.use(async (request, response) => {
             const updateData = request.body;
             if (ticket) {
                 Object.assign(ticket, updateData);
+                saveTickets(tickets);
+
                 logger.info(`Ticket updated: ${JSON.stringify(ticket)}`);
                 response.send(JSON.stringify(tickets));
             } else {
