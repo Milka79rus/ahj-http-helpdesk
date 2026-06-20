@@ -15,7 +15,6 @@ const createRequest = async (options = {}) => {
   if (!response.ok) {
     let errorText = `HTTP ошибка: ${response.status}`;
     try {
-
       const errorData = await response.json();
       errorText = errorData.error || errorData.message || errorText;
     } catch (e) {
